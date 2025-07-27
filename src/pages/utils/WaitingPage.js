@@ -131,8 +131,6 @@ const OrderWaitingPage = () => {
     checkOrderAuthorization();
   }, [orderid, firestore, navigate, auth, orderStatus]);
 
-  // Rest of the component code remains the same...
-
   const handlePickup = () => {
     navigate('/order-confirmation', { state: { orderId: orderid } });
   };
@@ -210,8 +208,12 @@ const OrderWaitingPage = () => {
         bg="white"
         p={6}
         borderRadius="lg"
-        boxShadow="md"
+        borderWidth="1px"
+        borderColor="black"
+        boxShadow="5px 5px 0px 0px rgba(0,0,0,1)"
         mt={4}
+        transition="all 0.3s ease"
+        _hover={{ boxShadow: "7px 7px 0px 0px rgba(0,0,0,1)" }}
       >
         <Flex direction="column" align="center" mb={6}>
           <Image
@@ -298,7 +300,13 @@ const OrderWaitingPage = () => {
         minHeight="100vh"
         px={containerPadding}
       >
-        <Alert status="error" variant="subtle">
+        <Alert 
+          status="error" 
+          variant="subtle"
+          borderWidth="1px"
+          borderColor="black"
+          boxShadow="3px 3px 0px 0px rgba(0,0,0,1)"
+        >
           <AlertIcon />
           <Text>You are not authorized to view this order.</Text>
         </Alert>
@@ -324,8 +332,12 @@ const OrderWaitingPage = () => {
         <Box 
           bg="white" 
           p={6} 
-          borderRadius="lg" 
-          boxShadow="md"
+          borderRadius="lg"
+          borderWidth="1px"
+          borderColor="black"
+          boxShadow="5px 5px 0px 0px rgba(0,0,0,1)"
+          transition="all 0.3s ease"
+          _hover={{ boxShadow: "7px 7px 0px 0px rgba(0,0,0,1)" }}
         >
           <Flex alignItems="center" mb={4}>
             <Icon 
@@ -359,6 +371,18 @@ const OrderWaitingPage = () => {
           onClick={handleOpenQRModal}
           width="full"
           isDisabled={!isReadyForPickup}
+          borderWidth="1px"
+          borderColor="black"
+          boxShadow="3px 3px 0px 0px rgba(0,0,0,1)"
+          _hover={{ 
+            boxShadow: "5px 5px 0px 0px rgba(0,0,0,1)",
+            transform: "translateY(-2px)"
+          }}
+          _active={{
+            boxShadow: "1px 1px 0px 0px rgba(0,0,0,1)",
+            transform: "translateY(1px)"
+          }}
+          transition="all 0.2s ease"
         >
           Show Order QR Code
         </Button>
@@ -375,16 +399,33 @@ const OrderWaitingPage = () => {
             size="lg" 
             onClick={handleBackToHome}
             width="full"
+            borderWidth="1px"
+            borderColor="black"
+            boxShadow="3px 3px 0px 0px rgba(0,0,0,1)"
+            _hover={{ 
+              boxShadow: "5px 5px 0px 0px rgba(0,0,0,1)",
+              transform: "translateY(-2px)"
+            }}
+            _active={{
+              boxShadow: "1px 1px 0px 0px rgba(0,0,0,1)",
+              transform: "translateY(1px)"
+            }}
+            transition="all 0.2s ease"
           >
             Back to Home
           </Button>
         )}
 
-        
-
-        <Modal isOpen={isQRModalOpen} onClose={handleCloseQRModal}>
-          <ModalOverlay />
-          <ModalContent>
+        <Modal 
+          isOpen={isQRModalOpen} 
+          onClose={handleCloseQRModal}
+        >
+          <ModalOverlay bg="blackAlpha.300" backdropFilter="blur(10px)" />
+          <ModalContent
+            borderRadius="xl"
+            borderWidth="2px"
+            borderColor="black"
+          >
             <ModalHeader>Order QR Code</ModalHeader>
             <ModalCloseButton />
             <ModalBody display="flex" justifyContent="center" py={6}>

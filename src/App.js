@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { ApolloClient, InMemoryCache, ApolloProvider } from '@apollo/client';
+import { QueryClient, QueryClientProvider } from 'react-query';
 import { ChakraProvider } from '@chakra-ui/react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
@@ -50,6 +52,8 @@ import GroceryDashboard from './pages/groceriesPage/DashBoardGroceries';
 import OrderProcessPage from './pages/groceriesPage/orderProcessingPage';
 
 import LevelProgression from './Components/Level/LevelProgression';
+import Leaderboard from './pages/user/LeaderBoard';
+import UPICheckout from './pages/cart/UPIcheckout';
 
 
 
@@ -89,8 +93,15 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   return children;
 };
 
+// Add VendorWelcomeCheck component
+
+
+
+
 function App() {
   return (
+   
+    
     <ChakraProvider>
       <BrowserRouter basename={process.env.PUBLIC_URL}>
         <ScrollToTop />
@@ -117,15 +128,17 @@ function App() {
             <Route path="/addcoupon" element={<AddCouponForm />} />
             <Route path="/deleteAccount" element={<AccountDeletionPage />} />
             <Route path="/Groceriesbyfost" element={<GroceryPage />} />
-           
+            <Route path="/LeaderBoard" element={<Leaderboard />} />
             <Route path="/Error" element={<TransactionError />} />
             <Route path="/levels" element={<LevelProgression />} />
+
 
             {/* Protected User Routes */}
             <Route path="/main" element={<ProtectedRoute><Main /></ProtectedRoute>} />
             <Route path="/shop/:shopId" element={<ProtectedRoute><Shop /></ProtectedRoute>} />
             <Route path="/cart" element={<ProtectedRoute><Cart /></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><UserOrders /></ProtectedRoute>} />
+            <Route path="/checkout" element={<UPICheckout />} />
 
             {/* Admin Routes */}
             <Route path="/admin/shops" element={
@@ -170,6 +183,8 @@ function App() {
         <Footer />
       </BrowserRouter>
     </ChakraProvider>
+   
+
   );
 }
 

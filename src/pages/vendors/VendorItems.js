@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { gql, useQuery, useMutation } from '@apollo/client';
+import { Link } from 'react-router-dom';
 import {
   Box,
   VStack,
@@ -33,7 +35,7 @@ import {
   Radio,
   RadioGroup
 } from "@chakra-ui/react";
-import { Link } from 'react-router-dom';
+// import { SearchIcon, EditIcon } from "@chakra-ui/icons";
 import {
   getFirestore,
   collection,
@@ -77,6 +79,91 @@ const FOOD_CATEGORIES = [
   "Nutella Ninjas",
   "Protein Shakes"
 ];
+
+const GET_VENDOR_ITEMS = gql`
+  query GetItemsByVendor($vendorId: String!) {
+    itemsByVendor(vendorId: $vendorId) {
+      id
+      name
+      price
+      description
+      imageUrl
+      category
+      dietType
+      isActive
+      shopId
+      vendorId
+      createdAt
+    }
+  }
+`;
+
+const CREATE_ITEM = gql`
+  mutation CreateItem(
+    $category: String!
+    $description: String!
+    $dietType: String!
+    $imageUrl: String!
+    $isActive: Boolean!
+    $name: String!
+    $price: Float!
+    $shopId: String!
+    $vendorId: String!
+  ) {
+    createItem(
+      category: $category
+      description: $description
+      dietType: $dietType
+      imageUrl: $imageUrl
+      isActive: $isActive
+      name: $name
+      price: $price
+      shopId: $shopId
+      vendorId: $vendorId
+    ) {
+      id
+      name
+      category
+      price
+      description
+      imageUrl
+      dietType
+      isActive
+    }
+  }
+`;
+const UPDATE_ITEM = gql`
+  mutation UpdateItem(
+    $id: ID!
+    $category: String!
+    $description: String!
+    $dietType: String!
+    $imageUrl: String!
+    $isActive: Boolean!
+    $name: String!
+    $price: Float!
+  ) {
+    updateItem(
+      id: $id
+      category: $category
+      description: $description
+      dietType: $dietType
+      imageUrl: $imageUrl
+      isActive: $isActive
+      name: $name
+      price: $price
+    ) {
+      id
+      name
+      category
+      price
+      description
+      imageUrl
+      dietType
+      isActive
+    }
+  }
+`;
 
 const VendorItems = () => {
   const [items, setItems] = useState([]);
@@ -122,6 +209,36 @@ const VendorItems = () => {
     lg: "repeat(auto-fill, minmax(250px, 1fr))"
   });
 
+  const { data: queryData, loading: queryLoading, error: queryError } = useQuery(GET_VENDOR_ITEMS, {
+    variables: { 
+      vendorId: JSON.parse(localStorage.getItem("user"))?.uid 
+    }
+  });
+
+  const [createItem, { loading: createLoading }] = useMutation(CREATE_ITEM, {
+    onCompleted: () => {
+      toast({
+        title: "Success",
+        description: "Item added successfully",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+      onClose();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to add item: ${error.message}`,
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    },
+    refetchQueries: [{ query: GET_VENDOR_ITEMS }]
+  });
+
+
   const handleSearch = (e) => {
     const term = e.target.value.toLowerCase();
     setSearchTerm(term);
@@ -157,8 +274,15 @@ const VendorItems = () => {
   });
 
   useEffect(() => {
-    fetchItems();
-  }, []);
+    if (queryData) {
+      setItems(queryData.itemsByVendor);
+      setLoading(false);
+    }
+    if (queryError) {
+      setError(queryError.message);
+      setLoading(false);
+    }
+  }, [queryData, queryError]);
 
   const fetchItems = async () => {
     try {
@@ -307,13 +431,14 @@ const VendorItems = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-  
+
     try {
       const userStr = localStorage.getItem("user");
       const user = JSON.parse(userStr);
-  
+
       let imageUrl = itemData.imageUrl;
       if (itemImage) {
+        // Keep your existing image upload logic for now
         imageUrl = await uploadItemImage();
         if (!imageUrl) {
           console.error("Image upload failed");
@@ -321,50 +446,39 @@ const VendorItems = () => {
           return;
         }
       }
-  
-      const newItem = {
-        name: itemData.name,
-        price: parseFloat(itemData.price),
-        description: itemData.description,
-        imageUrl: imageUrl,
-        category: itemData.category, // Added category
-        dietType: itemData.dietType,
-        isActive: true,
-        vendorId: user.uid,
-        shopId: user.shopId || user.uid,
-        createdAt: new Date(),
-      };
-  
-      const docRef = await addDoc(collection(firestore, "items"), newItem);
-      
-      await fetchItems();
-      
-      // Reset form and close modal
+
+      await createItem({
+        variables: {
+          name: itemData.name,
+          price: parseFloat(itemData.price),
+          description: itemData.description,
+          imageUrl: imageUrl,
+          category: itemData.category,
+          dietType: itemData.dietType,
+          isActive: true,
+          vendorId: user.uid,
+          shopId: user.shopId || user.uid,
+        }
+      });
+
+      // Reset form
       setItemData({
         name: "",
         price: "",
         description: "",
         imageUrl: "",
-        category: "", // Reset category
+        category: "",
         isActive: true,
         dietType: "veg",
       });
       setItemImage(null);
       setItemImagePreview('');
-      onClose();
 
-      toast({
-        title: "Success",
-        description: "Item added successfully",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-      });
     } catch (error) {
-      console.error("Full Error Details:", error);
+      console.error("Error:", error);
       toast({
         title: "Error",
-        description: `Failed to add item: ${error.message}`,
+        description: error.message,
         status: "error",
         duration: 5000,
         isClosable: true,
@@ -374,7 +488,7 @@ const VendorItems = () => {
     }
   };
 
-  if (loading) {
+  if (loading || queryLoading) {
     return (
       <Box p={6} display="flex" justifyContent="center" alignItems="center" minH="200px">
         <Spinner size="xl" />
@@ -382,12 +496,12 @@ const VendorItems = () => {
     );
   }
 
-  if (error) {
+  if (error || queryError) {
     return (
-      <Box p={{ base: 3, md: 6 }}>
+      <Box p={6}>
         <Alert status="error">
           <AlertIcon />
-          {error}
+          {error || queryError.message}
         </Alert>
       </Box>
     );

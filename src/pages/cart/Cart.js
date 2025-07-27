@@ -78,7 +78,7 @@ const Cart = () => {
               items: [],
               shopName: item.shopName,
               shopId: item.shopId,
-              vendorId: item.vendorId, // Include vendorId
+              vendorId: item.vendorId,
               total: 0
             };
           }
@@ -90,7 +90,7 @@ const Cart = () => {
             imageUrl: item.imageUrl,
             category: item.category,
             dietType: item.dietType,
-            point: item.point// Include additional item fields
+            point: item.point
           });
           acc[item.shopId].total += item.price * item.quantity;
           return acc;
@@ -138,7 +138,6 @@ const Cart = () => {
         return {
           ...item,
           quantity: newQuantity,
-          // Ensure all required fields are preserved
           vendorId: item.vendorId,
           category: item.category,
           dietType: item.dietType,
@@ -152,7 +151,6 @@ const Cart = () => {
     setCartItems(updatedCart);
     window.dispatchEvent(new Event('cartUpdate'));
     
-    // Update grouped items with consistent structure
     const grouped = updatedCart.reduce((acc, item) => {
       const shopId = item.shopId;
       if (!acc[shopId]) {
@@ -174,7 +172,6 @@ const Cart = () => {
         dietType: item.dietType,
         point: item.point,
         vendorId: item.vendorId,
-        
       });
       acc[shopId].total += parseFloat(item.price) * item.quantity;
       return acc;
@@ -190,24 +187,16 @@ const Cart = () => {
 
   const generatePayUHash = (params) => {
     const PAYU_SALT_KEY = 'RZdd32itbMYSKM7Kwo4teRkhUKCsWbnj';
-  
-    // Ensure consistent order of parameters
     const hashString = `${params.key}|${params.txnid}|${params.amount}|${params.productinfo}|${params.firstname}|${params.email}|||||||||||${PAYU_SALT_KEY}`;
-  
-    // Use SHA-512 to generate the hash
     const hash = CryptoJS.SHA512(hashString).toString(CryptoJS.enc.Hex);
-    
     return hash;
   };
-
-  
 
   const initiatePayUPayment = async (shopData) => {
     const user = JSON.parse(localStorage.getItem('user'));
     
     try {
-      // Call backend to initialize payment
-      const response = await fetch(`https://fosterman.click/initiate-payment`, {
+      const response = await fetch(`http://localhost:5058/initiate-payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -227,7 +216,6 @@ const Cart = () => {
   
       const paymentData = await response.json();
       
-      // Create and submit payment form
       const form = document.createElement('form');
       form.method = 'post';
       form.action = paymentData.payuBaseUrl;
@@ -245,7 +233,6 @@ const Cart = () => {
       document.body.appendChild(form);
       form.submit();
       
-      // Clear cart after form submission
       localStorage.removeItem('cart');
       setCartItems([]);
       setGroupedItems({});

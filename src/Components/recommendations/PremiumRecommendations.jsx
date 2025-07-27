@@ -16,9 +16,9 @@ import {
   useBreakpointValue,
 } from '@chakra-ui/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore';
+import { getFirestore, collection, query, where, getDocs } from 'firebase/firestore';
 import { app } from '../../Components/firebase/Firebase';
-import { FaCartPlus, FaCrown, FaStar } from 'react-icons/fa';
+import { FaCartPlus, FaCrown } from 'react-icons/fa';
 
 const MotionBox = motion(Box);
 const MotionFlex = motion(Flex);
@@ -76,9 +76,9 @@ const PremiumItemCard = ({ item, onAddToCart }) => {
               {item.name}
             </Heading>
             <HStack spacing={1} color="gray.600">
-              <Icon as={FaStar} color="yellow.400" boxSize={3} />
+              <Icon as={FaCrown} color="purple.400" boxSize={3} />
               <Text fontSize="xs">
-                {item.shopName || 'Premium Shop'}
+                from {item.shopName}
               </Text>
             </HStack>
           </VStack>
@@ -96,10 +96,7 @@ const PremiumItemCard = ({ item, onAddToCart }) => {
               colorScheme="purple"
               leftIcon={<FaCartPlus size={12} />}
               variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddToCart(item);
-              }}
+              onClick={() => onAddToCart(item)}
               _hover={{
                 bg: 'purple.100',
               }}
@@ -124,6 +121,7 @@ const PremiumItemCard = ({ item, onAddToCart }) => {
       cursor="pointer"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={() => onAddToCart(item)}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       _before={{
@@ -195,9 +193,9 @@ const PremiumItemCard = ({ item, onAddToCart }) => {
           {item.name}
         </Heading>
         <HStack spacing={2} color="gray.600">
-          <Icon as={FaStar} color="yellow.400" />
+          <Icon as={FaCrown} color="purple.400" />
           <Text fontSize="sm">
-            {item.shopName || 'Premium Shop'}
+            from {item.shopName}
           </Text>
         </HStack>
         <Flex justify="space-between" align="center" w="full">
@@ -206,7 +204,7 @@ const PremiumItemCard = ({ item, onAddToCart }) => {
             fontWeight="bold"
             fontSize="lg"
           >
-             ₹{item.price}
+            ₹{item.price}
           </Text>
           <MotionFlex
             animate={isHovered ? { scale: 1.1 } : { scale: 1 }}
@@ -217,10 +215,6 @@ const PremiumItemCard = ({ item, onAddToCart }) => {
               colorScheme="purple"
               leftIcon={<FaCartPlus />}
               variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddToCart(item);
-              }}
               _hover={{
                 bg: 'purple.100',
               }}
@@ -245,7 +239,6 @@ const PremiumRecommendations = () => {
   useEffect(() => {
     const fetchPremiumItems = async () => {
       try {
-        // Query only active items
         const itemsRef = collection(firestore, 'items');
         const q = query(itemsRef, where('isActive', '==', true));
         const itemsSnapshot = await getDocs(q);
@@ -258,22 +251,18 @@ const PremiumRecommendations = () => {
         itemsSnapshot.forEach(doc => {
           const item = { id: doc.id, ...doc.data() };
           
-          // Only include items with valid data
           if (item.price && item.shopId) {
             items.push(item);
             totalPrice += item.price;
             
-            // Get shop details for each item
             const shopRef = collection(firestore, 'shops');
             const shopQuery = query(shopRef, where('uid', '==', item.shopId));
             shopsPromises.push(getDocs(shopQuery));
           }
         });
         
-        // Wait for all shop queries to complete
         const shopsSnapshots = await Promise.all(shopsPromises);
         
-        // Map shop names to items
         items.forEach((item, index) => {
           const shopDocs = shopsSnapshots[index].docs;
           if (shopDocs.length > 0) {
@@ -282,11 +271,7 @@ const PremiumRecommendations = () => {
         });
 
         const averagePrice = totalPrice / items.length;
-        
-        // Filter items above average price
         const premiumItems = items.filter(item => item.price > averagePrice);
-        
-        // Shuffle and get random premium items
         const shuffledItems = premiumItems
           .sort(() => Math.random() - 0.5)
           .slice(0, 4);
@@ -304,21 +289,38 @@ const PremiumRecommendations = () => {
 
   const addToCart = (item) => {
     try {
-      const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+      let cart;
+      try {
+        const savedCart = localStorage.getItem('cart');
+        cart = savedCart ? JSON.parse(savedCart) : [];
+        
+        if (!Array.isArray(cart)) {
+          cart = [];
+        }
+      } catch (error) {
+        console.error('Error parsing cart:', error);
+        cart = [];
+      }
+      
       const existingItemIndex = cart.findIndex(cartItem => cartItem.id === item.id);
       
       if (existingItemIndex >= 0) {
         cart[existingItemIndex].quantity += 1;
       } else {
         cart.push({
-          ...item,
+          id: item.id,
+          name: item.name,
+          price: item.price,
           quantity: 1,
+          imageUrl: item.imageUrl,
+          shopId: item.shopId,
+          shopName: item.shopName
         });
       }
-      
+  
       localStorage.setItem('cart', JSON.stringify(cart));
       window.dispatchEvent(new Event('cartUpdate'));
-
+  
       toast({
         title: 'Added to cart',
         description: `${item.name} has been added to your cart`,

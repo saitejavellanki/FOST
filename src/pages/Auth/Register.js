@@ -30,6 +30,7 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
   signOut,
+  signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
   fetchSignInMethodsForEmail,
@@ -50,9 +51,9 @@ import { auth, firestore } from '../../Components/firebase/Firebase';
 import { createLogger } from '../utils/ErrorLoggers';
 
 const Register = () => {
-
   const logger = createLogger('RegisterComponent');
-  // Basic form state
+  
+  // Form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -62,12 +63,11 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
 
+  // Verification state
   const [verificationStatus, setVerificationStatus] = useState({
     isVerifying: false,
     message: ''
   });
-
-  // Verification state
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [verificationTimer, setVerificationTimer] = useState(0);
   const [tempUser, setTempUser] = useState(null);
@@ -82,6 +82,7 @@ const Register = () => {
   const toast = useToast();
   const navigate = useNavigate();
 
+  // Load registration data
   useEffect(() => {
     const loadRegistrationData = async () => {
       try {
@@ -133,104 +134,88 @@ const Register = () => {
     loadRegistrationData();
   }, [toast, role]);
 
-  // Cleanup verification check interval
-  // Clean up intervals and state on unmount
-useEffect(() => {
-  return () => {
-    if (verificationCheckInterval) {
-      clearInterval(verificationCheckInterval);
-    }
-    setVerificationTimer(0);
-    setVerificationStatus({
-      isVerifying: false,
-      message: ''
-    });
-  };
-}, []);
-
-useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, async (user) => {
-    if (user?.emailVerified) {
-      // Check if this user has a document in Firestore
-      const userDoc = await getDoc(doc(firestore, 'users', user.uid));
-      
-      // Only complete registration if the user document doesn't exist
-      if (!userDoc.exists()) {
-        await completeRegistration(user);
+  // Auth state listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user && !user.emailVerified) {
+        // Immediately sign out unverified users
+        await signOut(auth);
+        return;
       }
-    }
-  });
-
-  return () => unsubscribe();
-}, []);
-
-// Reset verification state when modal closes
-useEffect(() => {
-  if (!isVerificationModalOpen) {
-    if (verificationCheckInterval) {
-      clearInterval(verificationCheckInterval);
-    }
-    setVerificationTimer(0);
-    setVerificationStatus({
-      isVerifying: false,
-      message: ''
     });
-  }
-}, [isVerificationModalOpen]);
 
+    return () => unsubscribe();
+  }, []);
 
-
-const startVerificationCheck = (user) => {
-  try {
-    setVerificationTimer(300); // 5 minutes in seconds
-    setVerificationStatus({
-      isVerifying: true,
-      message: 'Email verification in progress...'
-    });
-    
-    // Clear any existing interval first
-    if (verificationCheckInterval) {
-      clearInterval(verificationCheckInterval);
-    }
-    
-    // Check less frequently (every 2 seconds instead of every second)
-    const interval = setInterval(async () => {
-      setVerificationTimer(prevTimer => {
-        if (prevTimer <= 0) {
-          clearInterval(interval);
-          handleVerificationTimeout(user);
-          return 0;
-        }
-        
-        // Only check verification status every 2 seconds
-        if (prevTimer % 2 === 0) {
-          checkVerificationStatus(user, interval);
-        }
-        return prevTimer - 1;
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      setTempUser(null);
+      if (verificationCheckInterval) {
+        clearInterval(verificationCheckInterval);
+      }
+      setVerificationTimer(0);
+      setVerificationStatus({
+        isVerifying: false,
+        message: ''
       });
-    }, 1000);
-    
-    setVerificationCheckInterval(interval);
-    
-    logger.info(new Error('Verification check started'), {
-      action: 'startVerificationCheck',
-      userId: user.uid,
-      email: user.email
-    });
-  } catch (error) {
-    logger.error(error, {
-      action: 'startVerificationCheck',
-      userId: user?.uid,
-      email: user?.email
-    });
-  }
-};
-  
-  // Separate function to handle verification timeout
+    };
+  }, []);
+
+  // Reset verification state when modal closes
+  useEffect(() => {
+    if (!isVerificationModalOpen) {
+      if (verificationCheckInterval) {
+        clearInterval(verificationCheckInterval);
+      }
+      setVerificationTimer(0);
+      setVerificationStatus({
+        isVerifying: false,
+        message: ''
+      });
+    }
+  }, [isVerificationModalOpen]);
+
+  const startVerificationCheck = (user) => {
+    try {
+      setVerificationTimer(300); // 5 minutes
+      setVerificationStatus({
+        isVerifying: true,
+        message: 'Email verification in progress...'
+      });
+      
+      if (verificationCheckInterval) {
+        clearInterval(verificationCheckInterval);
+      }
+      
+      const interval = setInterval(async () => {
+        setVerificationTimer(prevTimer => {
+          if (prevTimer <= 0) {
+            clearInterval(interval);
+            handleVerificationTimeout(user);
+            return 0;
+          }
+          
+          if (prevTimer % 2 === 0) {
+            checkVerificationStatus(user, interval);
+          }
+          return prevTimer - 1;
+        });
+      }, 1000);
+      
+      setVerificationCheckInterval(interval);
+      
+    } catch (error) {
+      logger.error(error, {
+        action: 'startVerificationCheck',
+        userId: user?.uid
+      });
+    }
+  };
+
   const handleVerificationTimeout = async (user) => {
     try {
       if (user) {
-        // Delete Firestore document
         try {
           await deleteDoc(doc(firestore, 'users', user.uid));
         } catch (docError) {
@@ -241,7 +226,6 @@ const startVerificationCheck = (user) => {
           });
         }
   
-        // Delete auth user
         try {
           await user.delete();
         } catch (userError) {
@@ -273,8 +257,7 @@ const startVerificationCheck = (user) => {
       });
     }
   };
-  
-  // Separate function to check verification status
+
   const checkVerificationStatus = async (user, interval) => {
     try {
       await user.reload();
@@ -284,24 +267,39 @@ const startVerificationCheck = (user) => {
           isVerifying: false,
           message: 'Email verified successfully!'
         });
-        
-        // Show immediate success feedback
-        toast({
-          title: 'Email Verified',
-          description: 'Your email has been verified successfully!',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
-  
-        // Complete registration process
-        await completeRegistration(user);
-        
-        logger.info(new Error('Email verification successful'), {
-          action: 'checkVerificationStatus',
-          userId: user.uid,
-          email: user.email
-        });
+
+        // Sign in after verification
+        try {
+          await signInWithEmailAndPassword(auth, user.email, tempUser.password);
+          
+          toast({
+            title: 'Email Verified',
+            description: 'Verification successful! Logging you in...',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+
+          await completeRegistration(user);
+          setTempUser(null);
+          
+        } catch (loginError) {
+          logger.error(loginError, {
+            action: 'post-verification-login',
+            userId: user.uid,
+            email: user.email
+          });
+          
+          toast({
+            title: 'Login Failed',
+            description: 'Please try logging in manually',
+            status: 'error',
+            duration: 5000,
+            isClosable: true,
+          });
+          
+          navigate('/login');
+        }
       }
     } catch (error) {
       logger.error(error, {
@@ -320,6 +318,141 @@ const startVerificationCheck = (user) => {
     }
   };
 
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setPasswordError('');
+    setIsLoading(true);
+
+    try {
+      // Validation checks
+      if (password !== confirmPassword) {
+        setPasswordError('Passwords do not match');
+        return;
+      }
+
+      if (role === 'admin' && restrictions.adminExists) {
+        throw new Error('Admin already exists');
+      }
+
+      if (role === 'vendor') {
+        if (!shopId) {
+          throw new Error('Shop selection required');
+        }
+        if (restrictions.takenShops.has(shopId)) {
+          throw new Error('Shop already has a vendor');
+        }
+      }
+
+      // Check for Google email
+      const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+      if (signInMethods.includes(GoogleAuthProvider.PROVIDER_ID)) {
+        toast({
+          title: 'Google Account Detected',
+          description: 'Please use the Google Sign In button instead',
+          status: 'info',
+          duration: 5000,
+        });
+        return;
+      }
+
+      // Register user
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      
+      // Immediately sign out
+      await signOut(auth);
+      
+      // Store credentials temporarily
+      setTempUser({
+        ...user,
+        password // Store password for post-verification login
+      });
+      
+      await sendEmailVerification(user);
+      setIsVerificationModalOpen(true);
+      startVerificationCheck(user);
+
+    } catch (error) {
+      logger.error(error, {
+        action: 'register',
+        email,
+        role
+      });
+
+      const errorMessages = {
+        'auth/email-already-in-use': 'This email is already registered',
+        'auth/invalid-email': 'Please enter a valid email address',
+        'auth/weak-password': 'Password should be at least 6 characters',
+        'auth/network-request-failed': 'Network error. Please check your connection',
+      };
+
+      toast({
+        title: 'Registration Failed',
+        description: errorMessages[error.code] || error.message,
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const completeRegistration = async (user) => {
+    try {
+      const userDoc = await getDoc(doc(firestore, 'users', user.uid));
+      if (userDoc.exists()) {
+        handleRedirect(role);
+        return;
+      }
+  
+      await setDoc(doc(firestore, 'users', user.uid), {
+        email: user.email,
+        role,
+        shopId: role === 'vendor' ? shopId : null,
+        createdAt: new Date()
+      });
+  
+      setIsVerificationModalOpen(false);
+  
+      toast({
+        title: 'Registration Successful!',
+        description: 'Welcome to our platform!',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+  
+      handleRedirect(role);
+  
+    } catch (error) {
+      logger.error(error, {
+        action: 'completeRegistration',
+        userId: user.uid,
+        role
+      });
+  
+      toast({
+        title: 'Registration Error',
+        description: 'Failed to complete registration. Please try again.',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleRedirect = (userRole) => {
+    switch (userRole) {
+      case 'admin':
+        navigate('/admin/shops');
+        break;
+      case 'vendor':
+        navigate('/vendor/items');
+        break;
+      default:
+        navigate('/');
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     try {
       setIsLoading(true);
@@ -328,11 +461,9 @@ const startVerificationCheck = (user) => {
       const user = result.user;
 
       if (!user.emailVerified) {
-        const error = new Error('Google email not verified');
-        logger.warn(error, {
+        logger.warn(new Error('Google email not verified'), {
           action: 'googleSignIn',
-          email: user.email,
-          userId: user.uid
+          email: user.email
         });
         
         toast({
@@ -367,6 +498,30 @@ const startVerificationCheck = (user) => {
     }
   };
 
+  const resendVerificationEmail = async () => {
+    if (!tempUser) return;
+    
+    try {
+      await sendEmailVerification(tempUser);
+      toast({
+        title: 'Verification Email Sent',
+        status: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      logger.error(error, {
+        action: 'resendVerification',
+        email: tempUser.email
+      });
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
   const handleCloseVerificationModal = () => {
     try {
       // Log modal closure
@@ -397,202 +552,6 @@ const startVerificationCheck = (user) => {
       logger.error(error, {
         action: 'handleCloseVerificationModal',
         userId: tempUser?.uid
-      });
-    }
-  };
-  const completeRegistration = async (user) => {
-    try {
-      // Check if user document already exists to prevent duplicate creation
-      const userDoc = await getDoc(doc(firestore, 'users', user.uid));
-      if (userDoc.exists()) {
-        // If user exists, redirect immediately
-        handleRedirect(role);
-        return;
-      }
-  
-      // Create user document in Firestore
-      await setDoc(doc(firestore, 'users', user.uid), {
-        email: user.email,
-        role,
-        shopId: role === 'vendor' ? shopId : null,
-        createdAt: new Date()
-      });
-  
-      // Close verification modal immediately if it's open
-      setIsVerificationModalOpen(false);
-  
-      // Show success message and redirect simultaneously
-      toast({
-        title: 'Registration Successful!',
-        description: 'Welcome to our platform!',
-        status: 'success',
-        duration: 3000, // Reduced from 5000
-        isClosable: true,
-      });
-  
-      // Redirect immediately without delay
-      handleRedirect(role);
-  
-      logger.info(new Error('Registration completed successfully'), {
-        action: 'completeRegistration',
-        userId: user.uid,
-        role,
-        shopId: role === 'vendor' ? shopId : null
-      });
-  
-    } catch (error) {
-      logger.error(error, {
-        action: 'completeRegistration',
-        userId: user.uid,
-        role
-      });
-  
-      toast({
-        title: 'Registration Error',
-        description: 'Failed to complete registration. Please try again.',
-        status: 'error',
-        duration: 3000, // Reduced from 5000
-        isClosable: true,
-      });
-    }
-  };
-
-  const handleRedirect = (userRole) => {
-    switch (userRole) {
-      case 'admin':
-        navigate('/admin/shops');
-        break;
-      case 'vendor':
-        navigate('/vendor/items');
-        break;
-      default:
-        navigate('/');
-    }
-  };
-  
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    setPasswordError('');
-    setIsLoading(true);
-
-    try {
-      // Validation checks
-      if (password !== confirmPassword) {
-        const error = new Error('Passwords do not match');
-        logger.warn(error, {
-          action: 'register',
-          validationType: 'passwordMatch'
-        });
-        setPasswordError('Passwords do not match');
-        return;
-      }
-
-      if (role === 'admin' && restrictions.adminExists) {
-        const error = new Error('Admin already exists');
-        logger.warn(error, {
-          action: 'register',
-          validationType: 'adminRestriction'
-        });
-        throw error;
-      }
-
-      if (role === 'vendor') {
-        if (!shopId) {
-          const error = new Error('Shop selection required');
-          logger.warn(error, {
-            action: 'register',
-            validationType: 'shopRequired'
-          });
-          throw error;
-        }
-        if (restrictions.takenShops.has(shopId)) {
-          const error = new Error('Shop already has a vendor');
-          logger.warn(error, {
-            action: 'register',
-            validationType: 'shopTaken',
-            shopId
-          });
-          throw error;
-        }
-      }
-
-      // Check for Google email
-      const signInMethods = await fetchSignInMethodsForEmail(auth, email);
-      const isGoogleEmail = signInMethods.includes(GoogleAuthProvider.PROVIDER_ID);
-
-      if (isGoogleEmail) {
-        const error = new Error('Email is associated with Google account');
-        logger.warn(error, {
-          action: 'register',
-          validationType: 'googleEmail',
-          email
-        });
-        
-        toast({
-          title: 'Google Account Detected',
-          description: 'Please use the Google Sign In button instead',
-          status: 'info',
-          duration: 5000,
-        });
-        return;
-      }
-
-      const { user } = await createUserWithEmailAndPassword(auth, email, password);
-      logger.info(new Error('User created successfully'), {
-        action: 'register',
-        userId: user.uid,
-        role
-      });
-      
-      setTempUser(user);
-      
-      await sendEmailVerification(user);
-      setIsVerificationModalOpen(true);
-      startVerificationCheck(user);
-
-    } catch (error) {
-      logger.error(error, {
-        action: 'register',
-        email,
-        role,
-        shopId: role === 'vendor' ? shopId : null
-      });
-
-      const errorMessages = {
-        'auth/email-already-in-use': 'This email is already registered',
-        'auth/invalid-email': 'Please enter a valid email address',
-        'auth/weak-password': 'Password should be at least 6 characters',
-        'auth/network-request-failed': 'Network error. Please check your connection',
-      };
-
-      toast({
-        title: 'Registration Failed',
-        description: errorMessages[error.code] || error.message,
-        status: 'error',
-        duration: 5000,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const resendVerificationEmail = async () => {
-    if (!tempUser) return;
-    
-    try {
-      await sendEmailVerification(tempUser);
-      toast({
-        title: 'Verification Email Sent',
-        status: 'success',
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error('Error resending verification:', error);
-      toast({
-        title: 'Error',
-        description: error.message,
-        status: 'error',
-        duration: 3000,
       });
     }
   };
