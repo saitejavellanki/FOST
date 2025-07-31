@@ -196,7 +196,7 @@ const Cart = () => {
     const user = JSON.parse(localStorage.getItem('user'));
     
     try {
-      const response = await fetch(`https://fosterman5058-1379738304.ap-south-1.elb.amazonaws.com/initiate-payment`, {
+      const response = await fetch(`https://backend.fosterman.in/initiate-payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
